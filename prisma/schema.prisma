@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  passwordHash     String
+  name             String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  songs            Song[]
+  karaokes         Karaoke[]
+  playlists        Playlist[]
+  karaokePlaylists KaraokePlaylist[]
+  customChords     CustomChord[]
+  uiStorage        String? // Stores UI preferences as a JSON string
+}
+
+model Song {
+  id               String     @id @default(uuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  artist           String?
+  album            String?
+  type             String? // 'gp' or 'text'
+  cloudUrl         String? // Path to stored GP file if applicable
+  textContent      String? // Text content for text tabs
+  originalKey      String?
+  tuning           String?
+  strummingPattern String?
+  capo             String?
+  dateAdded        BigInt // Unix timestamp
+  updatedAt        BigInt // Unix timestamp
+  playlists        Playlist[] @relation("PlaylistToSong")
+}
+
+model Karaoke {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  artist           String?
+  youtubeUrl       String?
+  cloudUrl         String? // Path to stored MP3
+  hasLocalAudio    Boolean           @default(false)
+  pitchShift       Float? // In semitones
+  textContent      String? // Synced lyrics
+  dateAdded        BigInt
+  updatedAt        BigInt
+  karaokePlaylists KaraokePlaylist[] @relation("KaraokePlaylistToKaraoke")
+}
+
+model Playlist {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt BigInt
+  updatedAt BigInt
+  songs     Song[]   @relation("PlaylistToSong")
+}
+
+model KaraokePlaylist {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt BigInt
+  updatedAt BigInt
+  karaokes  Karaoke[] @relation("KaraokePlaylistToKaraoke")
+}
+
+model CustomChord {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  root      String
+  frets     String // JSON array as string or comma separated
+  fingers   String // JSON array as string or comma separated
+  baseFret  Int
+  barres    String? // JSON array as string
+  updatedAt BigInt
+}
