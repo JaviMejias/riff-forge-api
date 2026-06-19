@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import authRoutes from './routes/authRoutes';
@@ -17,6 +18,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// M-8 fix: add helmet security headers
+// Since we are serving audio files across origins to our frontend, we need to allow cross-origin resource sharing
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 // Allow unlimited JSON payload for sync
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));

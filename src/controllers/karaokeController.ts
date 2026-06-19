@@ -1,14 +1,11 @@
 import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
-import youtubeDl from 'youtube-dl-exec';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { exec } from 'child_process';
 import util from 'util';
 const execPromise = util.promisify(exec);
-import lyricsFinder from 'lyrics-finder';
-
 // Helper to serialize BigInts
 const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, value) =>
     typeof value === 'bigint' ? value.toString() : value

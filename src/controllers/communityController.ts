@@ -11,21 +11,13 @@ export const getPublicSongs = async (req: Request, res: Response) => {
     const songs = await prisma.song.findMany({ 
       where: { isPublic: true },
       orderBy: { dateAdded: 'desc' },
-      take: 50
+      take: 50,
+      include: {
+        user: { select: { id: true, name: true } }
+      }
     });
 
-    const userIds = [...new Set(songs.map(s => s.userId))];
-    const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, name: true }
-    });
-
-    const songsWithUsers = songs.map(song => ({
-      ...song,
-      user: users.find(u => u.id === song.userId) || { id: song.userId, name: 'Usuario' }
-    }));
-
-    res.json(serializeBigInts(songsWithUsers));
+    res.json(serializeBigInts(songs));
   } catch (error) {
     console.error('Error fetching public songs:', error);
     res.status(500).json({ error: 'Failed to fetch public songs' });
@@ -37,21 +29,13 @@ export const getPublicKaraokes = async (req: Request, res: Response) => {
     const karaokes = await prisma.karaoke.findMany({ 
       where: { isPublic: true },
       orderBy: { dateAdded: 'desc' },
-      take: 50
+      take: 50,
+      include: {
+        user: { select: { id: true, name: true } }
+      }
     });
 
-    const userIds = [...new Set(karaokes.map(k => k.userId))];
-    const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, name: true }
-    });
-
-    const karaokesWithUsers = karaokes.map(karaoke => ({
-      ...karaoke,
-      user: users.find(u => u.id === karaoke.userId) || { id: karaoke.userId, name: 'Usuario' }
-    }));
-
-    res.json(serializeBigInts(karaokesWithUsers));
+    res.json(serializeBigInts(karaokes));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch public karaokes' });
   }
