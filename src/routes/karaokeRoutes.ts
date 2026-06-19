@@ -5,11 +5,12 @@ import { upload } from '../utils/upload';
 
 const router = Router();
 
-// Public routes for proxying
+// Public route — only lyrics are public (no API quota or disk risk)
 router.get('/lyrics', fetchLyrics);
-router.post('/download-audio', downloadAudio);
 
+// All other routes require authentication
 router.use(authenticate);
+router.post('/download-audio', downloadAudio);  // BE-4 fix: was unprotected
 router.get('/', getKaraokes);
 router.post('/', upload.single('file'), createKaraoke);
 router.put('/:id', upload.single('file'), updateKaraoke);
