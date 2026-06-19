@@ -7,9 +7,14 @@ const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, valu
 ));
 
 export const getPublicSongs = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const userId = req.userId;
   try {
     const songs = await prisma.song.findMany({ 
-      where: { isPublic: true },
+      where: { 
+        isPublic: true,
+        userId: { not: userId }
+      },
       orderBy: { dateAdded: 'desc' },
       take: 50
     });
@@ -33,9 +38,14 @@ export const getPublicSongs = async (req: Request, res: Response) => {
 };
 
 export const getPublicKaraokes = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const userId = req.userId;
   try {
     const karaokes = await prisma.karaoke.findMany({ 
-      where: { isPublic: true },
+      where: { 
+        isPublic: true,
+        userId: { not: userId }
+      },
       orderBy: { dateAdded: 'desc' },
       take: 50
     });
@@ -58,9 +68,14 @@ export const getPublicKaraokes = async (req: Request, res: Response) => {
 };
 
 export const getPublicCustomChords = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const userId = req.userId;
   try {
     const chords = await prisma.customChord.findMany({ 
-      where: { isPublic: true },
+      where: { 
+        isPublic: true,
+        userId: { not: userId }
+      },
       include: {
         user: { select: { id: true, name: true } }
       },
