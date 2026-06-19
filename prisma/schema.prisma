@@ -38,6 +38,7 @@ model Song {
   capo             String?
   dateAdded        BigInt // Unix timestamp
   updatedAt        BigInt // Unix timestamp
+  isPublic         Boolean    @default(false)
   playlists        Playlist[] @relation("PlaylistToSong")
 }
 
@@ -54,6 +55,7 @@ model Karaoke {
   textContent      String? // Synced lyrics
   dateAdded        BigInt
   updatedAt        BigInt
+  isPublic         Boolean           @default(false)
   karaokePlaylists KaraokePlaylist[] @relation("KaraokePlaylistToKaraoke")
 }
 
@@ -64,6 +66,7 @@ model Playlist {
   name      String
   createdAt BigInt
   updatedAt BigInt
+  isPublic  Boolean  @default(false)
   songs     Song[]   @relation("PlaylistToSong")
 }
 
@@ -74,6 +77,7 @@ model KaraokePlaylist {
   name      String
   createdAt BigInt
   updatedAt BigInt
+  isPublic  Boolean   @default(false)
   karaokes  Karaoke[] @relation("KaraokePlaylistToKaraoke")
 }
 
@@ -88,4 +92,5 @@ model CustomChord {
   baseFret  Int
   barres    String? // JSON array as string
   updatedAt BigInt
+  isPublic  Boolean @default(false)
 }

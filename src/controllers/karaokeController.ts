@@ -48,6 +48,7 @@ export const createKaraoke = async (req: Request, res: Response) => {
         hasLocalAudio: req.file ? true : (data.hasLocalAudio === 'true' || data.hasLocalAudio === true),
         pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
         textContent: data.textContent,
+        isPublic: data.isPublic === 'true' || data.isPublic === true,
         dateAdded: BigInt(data.dateAdded || Date.now()),
         updatedAt: BigInt(data.updatedAt || Date.now())
       }
@@ -91,6 +92,10 @@ export const updateKaraoke = async (req: Request, res: Response) => {
       textContent: data.textContent,
       updatedAt: BigInt(Date.now())
     };
+
+    if (data.isPublic !== undefined) {
+      updateData.isPublic = data.isPublic === 'true' || data.isPublic === true;
+    }
 
     if (data.dateAdded) updateData.dateAdded = BigInt(data.dateAdded);
 

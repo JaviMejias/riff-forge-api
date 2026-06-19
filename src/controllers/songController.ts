@@ -43,6 +43,7 @@ export const createSong = async (req: Request, res: Response) => {
         tuning: data.tuning,
         strummingPattern: data.strummingPattern,
         capo: data.capo,
+        isPublic: data.isPublic === 'true' || data.isPublic === true,
         dateAdded: BigInt(data.dateAdded || Date.now()),
         updatedAt: BigInt(data.updatedAt || Date.now())
       }
@@ -88,6 +89,9 @@ export const updateSong = async (req: Request, res: Response) => {
       cloudUrl: cloudUrl,
       updatedAt: BigInt(Date.now())
     };
+    if (data.isPublic !== undefined) {
+      updateData.isPublic = data.isPublic === 'true' || data.isPublic === true;
+    }
     if (data.dateAdded) updateData.dateAdded = BigInt(data.dateAdded);
 
     const song = await prisma.song.update({
