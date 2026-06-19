@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchLyrics = exports.processPitch = exports.downloadAudio = exports.deleteKaraoke = exports.updateKaraoke = exports.createKaraoke = exports.getKaraokes = void 0;
 const prisma_1 = require("../utils/prisma");
-const youtube_dl_exec_1 = __importDefault(require("youtube-dl-exec"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const crypto_1 = __importDefault(require("crypto"));
@@ -15,7 +14,6 @@ const execPromise = util_1.default.promisify(child_process_1.exec);
 // Helper to serialize BigInts
 const serializeBigInts = (obj) => JSON.parse(JSON.stringify(obj, (key, value) => typeof value === 'bigint' ? value.toString() : value));
 const getKaraokes = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const karaokes = await prisma_1.prisma.karaoke.findMany({ where: { userId } });
@@ -27,7 +25,6 @@ const getKaraokes = async (req, res) => {
 };
 exports.getKaraokes = getKaraokes;
 const createKaraoke = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const data = req.body;
@@ -46,6 +43,7 @@ const createKaraoke = async (req, res) => {
                 hasLocalAudio: req.file ? true : (data.hasLocalAudio === 'true' || data.hasLocalAudio === true),
                 pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
                 textContent: data.textContent,
+                isPublic: data.isPublic === 'true' || data.isPublic === true,
                 dateAdded: BigInt(data.dateAdded || Date.now()),
                 updatedAt: BigInt(data.updatedAt || Date.now())
             }
@@ -59,7 +57,6 @@ const createKaraoke = async (req, res) => {
 };
 exports.createKaraoke = createKaraoke;
 const updateKaraoke = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     const id = req.params.id;
     try {
@@ -87,6 +84,9 @@ const updateKaraoke = async (req, res) => {
             textContent: data.textContent,
             updatedAt: BigInt(Date.now())
         };
+        if (data.isPublic !== undefined) {
+            updateData.isPublic = data.isPublic === 'true' || data.isPublic === true;
+        }
         if (data.dateAdded)
             updateData.dateAdded = BigInt(data.dateAdded);
         const karaoke = await prisma_1.prisma.karaoke.update({
@@ -101,7 +101,6 @@ const updateKaraoke = async (req, res) => {
 };
 exports.updateKaraoke = updateKaraoke;
 const deleteKaraoke = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     const id = req.params.id;
     try {
@@ -123,24 +122,64 @@ const deleteKaraoke = async (req, res) => {
     }
 };
 exports.deleteKaraoke = deleteKaraoke;
+const stream_1 = require("stream");
 const downloadAudio = async (req, res) => {
     const { url } = req.body;
     if (!url)
         return res.status(400).json({ error: 'URL is required' });
+    let outputPath = '';
     try {
         const filename = `${crypto_1.default.randomUUID()}.mp3`;
-        const outputPath = path_1.default.join(__dirname, '../../uploads', filename);
-        await (0, youtube_dl_exec_1.default)(url, {
-            extractAudio: true,
-            audioFormat: 'mp3',
-            output: outputPath,
-            noWarnings: true,
-            noCheckCertificates: true,
+        outputPath = path_1.default.join(__dirname, '../../uploads', filename);
+        // 1. Extraer ID del video de YouTube
+        const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
+        const videoId = match ? match[1] : null;
+        if (!videoId) {
+            return res.status(400).json({ error: 'URL de YouTube inválida' });
+        }
+        // 2. Pedir a RapidAPI que genere el MP3
+        const apiKey = process.env.RAPIDAPI_KEY;
+        if (!apiKey)
+            return res.status(500).json({ error: 'RAPIDAPI_KEY no configurada en el servidor' });
+        const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
+            headers: {
+                'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
+                'x-rapidapi-key': apiKey
+            }
         });
+        if (!apiRes.ok)
+            throw new Error(`RapidAPI failed: ${apiRes.status}`);
+        const data = await apiRes.json();
+        if (data.status !== 'ok' || !data.link) {
+            throw new Error(`RapidAPI Error: ${JSON.stringify(data)}`);
+        }
+        // 3. Descargar el MP3 desde el link generado
+        const fileRes = await fetch(data.link);
+        if (!fileRes.ok || !fileRes.body) {
+            throw new Error(`Failed to download MP3 from RapidAPI link: ${fileRes.status}`);
+        }
+        // 4. Guardarlo en la carpeta uploads de Oracle Cloud
+        const fileStream = fs_1.default.createWriteStream(outputPath);
+        const readable = stream_1.Readable.fromWeb(fileRes.body);
+        readable.pipe(fileStream);
+        await new Promise((resolve, reject) => {
+            fileStream.on('finish', resolve);
+            fileStream.on('error', reject);
+        });
+        // 5. Devolver el enlace local
         res.json({ cloudUrl: `/uploads/${filename}` });
     }
     catch (error) {
-        console.error('Error downloading audio:', error);
+        console.error('Error downloading audio via RapidAPI:', error);
+        // M-11 fix: remove partial file if it failed
+        if (fs_1.default.existsSync(outputPath)) {
+            try {
+                fs_1.default.unlinkSync(outputPath);
+            }
+            catch (e) {
+                console.error('Failed to clean up partial file:', e);
+            }
+        }
         res.status(500).json({ error: 'Failed to download audio' });
     }
 };

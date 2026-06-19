@@ -66,7 +66,6 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const verifyToken = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -79,7 +78,6 @@ export const verifyToken = async (req: Request, res: Response) => {
 };
 
 export const saveSettings = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const { uiStorage } = req.body;

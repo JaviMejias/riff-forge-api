@@ -7,10 +7,19 @@ exports.saveSettings = exports.verifyToken = exports.login = exports.signup = vo
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = require("../utils/prisma");
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET)
+    throw new Error('❌ JWT_SECRET env var is required but not set');
 const signup = async (req, res) => {
     try {
         const { email, password, name } = req.body;
+        // BE-6 fix: validate input before hashing
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
+        }
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+        }
         const existingUser = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(400).json({ error: 'User already exists' });
@@ -19,7 +28,8 @@ const signup = async (req, res) => {
         const user = await prisma_1.prisma.user.create({
             data: { email, passwordHash, name }
         });
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+        // BE-10 fix: reduce token lifetime from 30 days to 24 hours
+        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
     }
     catch (error) {
@@ -31,6 +41,10 @@ exports.signup = signup;
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        // BE-6 fix: validate input before comparing
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
+        }
         const user = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (!user) {
             return res.status(400).json({ error: 'Invalid credentials' });
@@ -39,7 +53,8 @@ const login = async (req, res) => {
         if (!validPassword) {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+        // BE-10 fix: reduce token lifetime
+        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name, uiStorage: user.uiStorage } });
     }
     catch (error) {
@@ -49,7 +64,6 @@ const login = async (req, res) => {
 };
 exports.login = login;
 const verifyToken = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const user = await prisma_1.prisma.user.findUnique({ where: { id: userId } });
@@ -63,7 +77,6 @@ const verifyToken = async (req, res) => {
 };
 exports.verifyToken = verifyToken;
 const saveSettings = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const { uiStorage } = req.body;

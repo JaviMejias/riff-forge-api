@@ -11,7 +11,9 @@ const fs_1 = __importDefault(require("fs"));
 const uploadDir = path_1.default.join(__dirname, '../../uploads');
 const extractAudio = async (req, res) => {
     const { url } = req.body;
-    if (!url || !url.includes('youtube.com') && !url.includes('youtu.be')) {
+    // BE-7 fix: strict regex to prevent "http://evil.com/?r=youtube.com" bypass
+    const isYouTube = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//.test(url);
+    if (!url || !isYouTube) {
         return res.status(400).json({ error: 'Valid YouTube URL is required' });
     }
     const uniqueId = Date.now() + '-' + Math.round(Math.random() * 1e9);

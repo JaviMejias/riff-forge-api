@@ -7,7 +7,6 @@ import crypto from 'crypto';
 import { exec } from 'child_process';
 import util from 'util';
 const execPromise = util.promisify(exec);
-// @ts-ignore
 import lyricsFinder from 'lyrics-finder';
 
 // Helper to serialize BigInts
@@ -16,7 +15,6 @@ const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, valu
 ));
 
 export const getKaraokes = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const karaokes = await prisma.karaoke.findMany({ where: { userId } });
@@ -27,7 +25,6 @@ export const getKaraokes = async (req: Request, res: Response) => {
 };
 
 export const createKaraoke = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const data = req.body;
@@ -62,7 +59,6 @@ export const createKaraoke = async (req: Request, res: Response) => {
 };
 
 export const updateKaraoke = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   const id = req.params.id as string;
   try {
@@ -111,7 +107,6 @@ export const updateKaraoke = async (req: Request, res: Response) => {
 };
 
 export const deleteKaraoke = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   const id = req.params.id as string;
   try {
@@ -140,9 +135,10 @@ export const downloadAudio = async (req: Request, res: Response) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
+  let outputPath = '';
   try {
     const filename = `${crypto.randomUUID()}.mp3`;
-    const outputPath = path.join(__dirname, '../../uploads', filename);
+    outputPath = path.join(__dirname, '../../uploads', filename);
 
     // 1. Extraer ID del video de YouTube
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);

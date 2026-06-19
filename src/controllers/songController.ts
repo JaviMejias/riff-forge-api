@@ -7,7 +7,6 @@ const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, valu
 ));
 
 export const getSongs = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const songs = await prisma.song.findMany({ where: { userId } });
@@ -18,7 +17,6 @@ export const getSongs = async (req: Request, res: Response) => {
 };
 
 export const createSong = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const data = req.body;
@@ -60,7 +58,6 @@ export const createSong = async (req: Request, res: Response) => {
 };
 
 export const updateSong = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   const id = req.params.id as string;
   try {
@@ -108,7 +105,6 @@ export const updateSong = async (req: Request, res: Response) => {
 };
 
 export const deleteSong = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   const id = req.params.id as string;
   try {

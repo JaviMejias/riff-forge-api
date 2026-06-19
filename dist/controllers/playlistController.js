@@ -5,7 +5,6 @@ const prisma_1 = require("../utils/prisma");
 const serializeBigInts = (obj) => JSON.parse(JSON.stringify(obj, (key, value) => typeof value === 'bigint' ? value.toString() : value));
 // ---- Playlists ----
 const getPlaylists = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const playlists = await prisma_1.prisma.playlist.findMany({ where: { userId }, include: { songs: true } });
@@ -22,25 +21,32 @@ const getPlaylists = async (req, res) => {
 };
 exports.getPlaylists = getPlaylists;
 const savePlaylists = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
-        const data = req.body; // Array of playlists
-        await prisma_1.prisma.playlist.deleteMany({ where: { userId } });
-        for (const pl of data) {
-            await prisma_1.prisma.playlist.create({
-                data: {
-                    id: pl.id,
-                    userId,
-                    name: pl.name,
-                    createdAt: BigInt(pl.createdAt || Date.now()),
-                    updatedAt: BigInt(pl.updatedAt || Date.now()),
-                    songs: {
-                        connect: (pl.songCloudIds || []).map((id) => ({ id }))
-                    }
-                }
-            });
+        const data = req.body;
+        // BE-5 fix: validate input is array before deleting anything
+        if (!Array.isArray(data)) {
+            return res.status(400).json({ error: 'Expected an array of playlists' });
         }
+        // BE-5 fix: wrap in transaction so a mid-loop failure doesn't leave user with no data
+        await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.playlist.deleteMany({ where: { userId } });
+            for (const pl of data) {
+                await tx.playlist.create({
+                    data: {
+                        id: pl.id,
+                        userId,
+                        name: pl.name,
+                        createdAt: BigInt(pl.createdAt || Date.now()),
+                        updatedAt: BigInt(pl.updatedAt || Date.now()),
+                        isPublic: pl.isPublic === 'true' || pl.isPublic === true,
+                        songs: {
+                            connect: (pl.songCloudIds || []).map((id) => ({ id }))
+                        }
+                    }
+                });
+            }
+        });
         res.json({ success: true });
     }
     catch (error) {
@@ -51,7 +57,6 @@ const savePlaylists = async (req, res) => {
 exports.savePlaylists = savePlaylists;
 // ---- Karaoke Playlists ----
 const getKaraokePlaylists = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const playlists = await prisma_1.prisma.karaokePlaylist.findMany({ where: { userId }, include: { karaokes: true } });
@@ -67,25 +72,32 @@ const getKaraokePlaylists = async (req, res) => {
 };
 exports.getKaraokePlaylists = getKaraokePlaylists;
 const saveKaraokePlaylists = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
-        const data = req.body; // Array of karaoke playlists
-        await prisma_1.prisma.karaokePlaylist.deleteMany({ where: { userId } });
-        for (const pl of data) {
-            await prisma_1.prisma.karaokePlaylist.create({
-                data: {
-                    id: pl.id,
-                    userId,
-                    name: pl.name,
-                    createdAt: BigInt(pl.createdAt || Date.now()),
-                    updatedAt: BigInt(pl.updatedAt || Date.now()),
-                    karaokes: {
-                        connect: (pl.karaokeCloudIds || []).map((id) => ({ id }))
-                    }
-                }
-            });
+        const data = req.body;
+        // BE-5 fix: validate input is array before deleting anything
+        if (!Array.isArray(data)) {
+            return res.status(400).json({ error: 'Expected an array of karaoke playlists' });
         }
+        // BE-5 fix: wrap in transaction so a mid-loop failure doesn't leave user with no data
+        await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.karaokePlaylist.deleteMany({ where: { userId } });
+            for (const pl of data) {
+                await tx.karaokePlaylist.create({
+                    data: {
+                        id: pl.id,
+                        userId,
+                        name: pl.name,
+                        createdAt: BigInt(pl.createdAt || Date.now()),
+                        updatedAt: BigInt(pl.updatedAt || Date.now()),
+                        isPublic: pl.isPublic === 'true' || pl.isPublic === true,
+                        karaokes: {
+                            connect: (pl.karaokeCloudIds || []).map((id) => ({ id }))
+                        }
+                    }
+                });
+            }
+        });
         res.json({ success: true });
     }
     catch (error) {
@@ -96,7 +108,6 @@ const saveKaraokePlaylists = async (req, res) => {
 exports.saveKaraokePlaylists = saveKaraokePlaylists;
 // ---- Custom Chords ----
 const getCustomChords = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const chords = await prisma_1.prisma.customChord.findMany({ where: { userId } });
@@ -108,26 +119,33 @@ const getCustomChords = async (req, res) => {
 };
 exports.getCustomChords = getCustomChords;
 const saveCustomChords = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
-        const data = req.body; // Array of custom chords
-        await prisma_1.prisma.customChord.deleteMany({ where: { userId } });
-        for (const c of data) {
-            await prisma_1.prisma.customChord.create({
-                data: {
-                    id: c.id,
-                    userId,
-                    name: c.name,
-                    root: c.root,
-                    frets: typeof c.frets === 'string' ? c.frets : JSON.stringify(c.frets),
-                    fingers: typeof c.fingers === 'string' ? c.fingers : JSON.stringify(c.fingers),
-                    baseFret: parseInt(c.baseFret),
-                    barres: typeof c.barres === 'string' ? c.barres : JSON.stringify(c.barres || []),
-                    updatedAt: BigInt(c.updatedAt || Date.now())
-                }
-            });
+        const data = req.body;
+        // BE-5 fix: validate input is array before deleting anything
+        if (!Array.isArray(data)) {
+            return res.status(400).json({ error: 'Expected an array of chords' });
         }
+        // BE-5 fix: wrap in transaction so a mid-loop failure doesn't leave user with no data
+        await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.customChord.deleteMany({ where: { userId } });
+            for (const c of data) {
+                await tx.customChord.create({
+                    data: {
+                        id: c.id,
+                        userId,
+                        name: c.name,
+                        root: c.root,
+                        frets: typeof c.frets === 'string' ? c.frets : JSON.stringify(c.frets),
+                        fingers: typeof c.fingers === 'string' ? c.fingers : JSON.stringify(c.fingers),
+                        baseFret: parseInt(c.baseFret),
+                        barres: typeof c.barres === 'string' ? c.barres : JSON.stringify(c.barres || []),
+                        updatedAt: BigInt(c.updatedAt || Date.now()),
+                        isPublic: c.isPublic === 'true' || c.isPublic === true
+                    }
+                });
+            }
+        });
         res.json({ success: true });
     }
     catch (error) {

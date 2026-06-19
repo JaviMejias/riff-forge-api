@@ -7,7 +7,6 @@ const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, valu
 
 // ---- Playlists ----
 export const getPlaylists = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const playlists = await prisma.playlist.findMany({ where: { userId }, include: { songs: true } });
@@ -25,7 +24,6 @@ export const getPlaylists = async (req: Request, res: Response) => {
 };
 
 export const savePlaylists = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const data = req.body;
@@ -61,7 +59,6 @@ export const savePlaylists = async (req: Request, res: Response) => {
 
 // ---- Karaoke Playlists ----
 export const getKaraokePlaylists = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const playlists = await prisma.karaokePlaylist.findMany({ where: { userId }, include: { karaokes: true } });
@@ -78,7 +75,6 @@ export const getKaraokePlaylists = async (req: Request, res: Response) => {
 };
 
 export const saveKaraokePlaylists = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const data = req.body;
@@ -114,7 +110,6 @@ export const saveKaraokePlaylists = async (req: Request, res: Response) => {
 
 // ---- Custom Chords ----
 export const getCustomChords = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const chords = await prisma.customChord.findMany({ where: { userId } });
@@ -125,7 +120,6 @@ export const getCustomChords = async (req: Request, res: Response) => {
 };
 
 export const saveCustomChords = async (req: Request, res: Response) => {
-  // @ts-ignore
   const userId = req.userId;
   try {
     const data = req.body;

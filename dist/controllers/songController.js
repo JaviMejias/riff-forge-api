@@ -5,7 +5,6 @@ const prisma_1 = require("../utils/prisma");
 // Helper to serialize BigInts
 const serializeBigInts = (obj) => JSON.parse(JSON.stringify(obj, (key, value) => typeof value === 'bigint' ? value.toString() : value));
 const getSongs = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const songs = await prisma_1.prisma.song.findMany({ where: { userId } });
@@ -17,7 +16,6 @@ const getSongs = async (req, res) => {
 };
 exports.getSongs = getSongs;
 const createSong = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     try {
         const data = req.body;
@@ -40,6 +38,7 @@ const createSong = async (req, res) => {
                 tuning: data.tuning,
                 strummingPattern: data.strummingPattern,
                 capo: data.capo,
+                isPublic: data.isPublic === 'true' || data.isPublic === true,
                 dateAdded: BigInt(data.dateAdded || Date.now()),
                 updatedAt: BigInt(data.updatedAt || Date.now())
             }
@@ -54,7 +53,6 @@ const createSong = async (req, res) => {
 };
 exports.createSong = createSong;
 const updateSong = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     const id = req.params.id;
     try {
@@ -81,6 +79,9 @@ const updateSong = async (req, res) => {
             cloudUrl: cloudUrl,
             updatedAt: BigInt(Date.now())
         };
+        if (data.isPublic !== undefined) {
+            updateData.isPublic = data.isPublic === 'true' || data.isPublic === true;
+        }
         if (data.dateAdded)
             updateData.dateAdded = BigInt(data.dateAdded);
         const song = await prisma_1.prisma.song.update({
@@ -95,7 +96,6 @@ const updateSong = async (req, res) => {
 };
 exports.updateSong = updateSong;
 const deleteSong = async (req, res) => {
-    // @ts-ignore
     const userId = req.userId;
     const id = req.params.id;
     try {
