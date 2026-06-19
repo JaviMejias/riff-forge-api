@@ -1,7 +1,7 @@
 FROM node:20-bullseye-slim
 
-# Install ffmpeg for audio processing
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg and python3 for audio processing and youtube-dl
+RUN apt-get update && apt-get install -y ffmpeg python3 && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
