@@ -18,6 +18,7 @@ export const getPublicSongs = async (req: Request, res: Response) => {
     });
     res.json(serializeBigInts(songs));
   } catch (error) {
+    console.error('Error fetching public songs:', error);
     res.status(500).json({ error: 'Failed to fetch public songs' });
   }
 };
