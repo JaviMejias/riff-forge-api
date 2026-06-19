@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('❌ JWT_SECRET env var is required but not set');
 
 export const signup = async (req: Request, res: Response) => {
   try {

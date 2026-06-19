@@ -153,7 +153,8 @@ export const downloadAudio = async (req: Request, res: Response) => {
     }
 
     // 2. Pedir a RapidAPI que genere el MP3
-    const apiKey = process.env.RAPIDAPI_KEY || 'c9117d63b8mshb442dcb1e10060bp1f5a88jsn6f88c2e57088';
+    const apiKey = process.env.RAPIDAPI_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'RAPIDAPI_KEY no configurada en el servidor' });
     const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
       headers: {
         'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
