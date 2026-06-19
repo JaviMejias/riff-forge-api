@@ -134,6 +134,8 @@ export const deleteKaraoke = async (req: Request, res: Response) => {
   }
 };
 
+import { Readable } from 'stream';
+
 export const downloadAudio = async (req: Request, res: Response) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
@@ -142,18 +144,50 @@ export const downloadAudio = async (req: Request, res: Response) => {
     const filename = `${crypto.randomUUID()}.mp3`;
     const outputPath = path.join(__dirname, '../../uploads', filename);
 
-    await youtubeDl(url, {
-      extractAudio: true,
-      audioFormat: 'mp3',
-      output: outputPath,
-      noWarnings: true,
-      noCheckCertificates: true,
-      extractorArgs: 'youtube:player_client=android',
-    } as any);
+    // 1. Extraer ID del video de YouTube
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
+    const videoId = match ? match[1] : null;
 
+    if (!videoId) {
+      return res.status(400).json({ error: 'URL de YouTube inválida' });
+    }
+
+    // 2. Pedir a RapidAPI que genere el MP3
+    const apiKey = process.env.RAPIDAPI_KEY || 'c9117d63b8mshb442dcb1e10060bp1f5a88jsn6f88c2e57088';
+    const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
+      headers: {
+        'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
+        'x-rapidapi-key': apiKey
+      }
+    });
+
+    if (!apiRes.ok) throw new Error(`RapidAPI failed: ${apiRes.status}`);
+
+    const data = await apiRes.json();
+    if (data.status !== 'ok' || !data.link) {
+      throw new Error(`RapidAPI Error: ${JSON.stringify(data)}`);
+    }
+
+    // 3. Descargar el MP3 desde el link generado
+    const fileRes = await fetch(data.link);
+    if (!fileRes.ok || !fileRes.body) {
+      throw new Error(`Failed to download MP3 from RapidAPI link: ${fileRes.status}`);
+    }
+
+    // 4. Guardarlo en la carpeta uploads de Oracle Cloud
+    const fileStream = fs.createWriteStream(outputPath);
+    const readable = Readable.fromWeb(fileRes.body as any);
+    readable.pipe(fileStream);
+
+    await new Promise((resolve, reject) => {
+      fileStream.on('finish', resolve);
+      fileStream.on('error', reject);
+    });
+
+    // 5. Devolver el enlace local
     res.json({ cloudUrl: `/uploads/${filename}` });
   } catch (error) {
-    console.error('Error downloading audio:', error);
+    console.error('Error downloading audio via RapidAPI:', error);
     res.status(500).json({ error: 'Failed to download audio' });
   }
 };
