@@ -39,6 +39,7 @@ export const savePlaylists = async (req: Request, res: Response) => {
           name: pl.name,
           createdAt: BigInt(pl.createdAt || Date.now()),
           updatedAt: BigInt(pl.updatedAt || Date.now()),
+          isPublic: pl.isPublic === 'true' || pl.isPublic === true,
           songs: {
             connect: (pl.songCloudIds || []).map((id: string) => ({ id }))
           }
@@ -85,6 +86,7 @@ export const saveKaraokePlaylists = async (req: Request, res: Response) => {
           name: pl.name,
           createdAt: BigInt(pl.createdAt || Date.now()),
           updatedAt: BigInt(pl.updatedAt || Date.now()),
+          isPublic: pl.isPublic === 'true' || pl.isPublic === true,
           karaokes: {
             connect: (pl.karaokeCloudIds || []).map((id: string) => ({ id }))
           }
@@ -128,7 +130,8 @@ export const saveCustomChords = async (req: Request, res: Response) => {
           fingers: typeof c.fingers === 'string' ? c.fingers : JSON.stringify(c.fingers),
           baseFret: parseInt(c.baseFret),
           barres: typeof c.barres === 'string' ? c.barres : JSON.stringify(c.barres || []),
-          updatedAt: BigInt(c.updatedAt || Date.now())
+          updatedAt: BigInt(c.updatedAt || Date.now()),
+          isPublic: c.isPublic === 'true' || c.isPublic === true
         }
       });
     }
