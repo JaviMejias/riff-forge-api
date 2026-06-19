@@ -1,7 +1,11 @@
 FROM node:20-bullseye-slim
 
-# Install ffmpeg and python3 for audio processing and youtube-dl
-RUN apt-get update && apt-get install -y ffmpeg python3 && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg, python3, curl, unzip for audio processing and youtube-dl
+RUN apt-get update && apt-get install -y ffmpeg python3 curl unzip && rm -rf /var/lib/apt/lists/*
+
+# Install deno globally for yt-dlp JS execution
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV PATH="/root/.deno/bin:${PATH}"
 
 # Set working directory
 WORKDIR /app
