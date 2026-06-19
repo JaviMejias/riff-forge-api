@@ -8,7 +8,9 @@ const uploadDir = path.join(__dirname, '../../uploads');
 
 export const extractAudio = async (req: Request, res: Response) => {
   const { url } = req.body;
-  if (!url || !url.includes('youtube.com') && !url.includes('youtu.be')) {
+  // BE-7 fix: strict regex to prevent "http://evil.com/?r=youtube.com" bypass
+  const isYouTube = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//.test(url);
+  if (!url || !isYouTube) {
     return res.status(400).json({ error: 'Valid YouTube URL is required' });
   }
 

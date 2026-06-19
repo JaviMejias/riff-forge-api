@@ -10,6 +10,14 @@ export const signup = async (req: Request, res: Response) => {
   try {
     const { email, password, name } = req.body;
     
+    // BE-6 fix: validate input before hashing
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+    
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
@@ -20,7 +28,8 @@ export const signup = async (req: Request, res: Response) => {
       data: { email, passwordHash, name }
     });
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    // BE-10 fix: reduce token lifetime from 30 days to 24 hours
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
   } catch (error) {
     console.error(error);
@@ -32,6 +41,11 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     
+    // BE-6 fix: validate input before comparing
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
+    }
+    
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
@@ -42,7 +56,8 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    // BE-10 fix: reduce token lifetime
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, uiStorage: user.uiStorage } });
   } catch (error) {
     console.error(error);
