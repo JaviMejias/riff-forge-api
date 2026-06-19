@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 # Install ffmpeg, python3, curl, unzip for audio processing and youtube-dl
 RUN apt-get update && apt-get install -y ffmpeg python3 curl unzip && rm -rf /var/lib/apt/lists/*
