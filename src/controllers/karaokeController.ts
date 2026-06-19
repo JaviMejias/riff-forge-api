@@ -148,6 +148,7 @@ export const downloadAudio = async (req: Request, res: Response) => {
       output: outputPath,
       noWarnings: true,
       noCheckCertificates: true,
+      extractorArgs: 'youtube:player_client=android,web',
     } as any);
 
     res.json({ cloudUrl: `/uploads/${filename}` });
