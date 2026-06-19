@@ -53,6 +53,12 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Riff Forge API is running' });
 });
 
+// Global error handler (M-10 fix)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled Error:', err.stack || err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

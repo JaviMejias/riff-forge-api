@@ -189,6 +189,14 @@ export const downloadAudio = async (req: Request, res: Response) => {
     res.json({ cloudUrl: `/uploads/${filename}` });
   } catch (error) {
     console.error('Error downloading audio via RapidAPI:', error);
+    // M-11 fix: remove partial file if it failed
+    if (fs.existsSync(outputPath)) {
+      try {
+        fs.unlinkSync(outputPath);
+      } catch (e) {
+        console.error('Failed to clean up partial file:', e);
+      }
+    }
     res.status(500).json({ error: 'Failed to download audio' });
   }
 };
