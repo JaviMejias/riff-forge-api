@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
+const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const songRoutes_1 = __importDefault(require("./routes/songRoutes"));
@@ -17,6 +18,11 @@ const communityRoutes_1 = __importDefault(require("./routes/communityRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
+// M-8 fix: add helmet security headers
+// Since we are serving audio files across origins to our frontend, we need to allow cross-origin resource sharing
+app.use((0, helmet_1.default)({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 // Allow unlimited JSON payload for sync
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '50mb' }));
