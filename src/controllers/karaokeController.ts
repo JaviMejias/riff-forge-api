@@ -230,9 +230,15 @@ export const processPitch = async (req: Request, res: Response) => {
     const processedPath = path.join(uploadsDir, processedFilename);
     const processedCloudUrl = `/uploads/${processedFilename}`;
 
-    // If it already exists, return it (caching)
+    // If it already exists and is valid (not 0 bytes), return it (caching)
     if (fs.existsSync(processedPath)) {
-      return res.json({ cloudUrl: processedCloudUrl });
+      const stats = fs.statSync(processedPath);
+      if (stats.size > 1000) { // If it's larger than 1KB, it's a valid file
+        return res.json({ cloudUrl: processedCloudUrl });
+      } else {
+        // Delete the corrupted/empty file
+        fs.unlinkSync(processedPath);
+      }
     }
 
     // Run FFMPEG with rubberband filter
@@ -242,12 +248,45 @@ export const processPitch = async (req: Request, res: Response) => {
     
     // We also use formant=preserved for more professional vocal shifting
     const ffmpegCmd = `ffmpeg -i "${originalPath}" -af "rubberband=pitch=${pitchRatio}:formant=preserved" -y "${processedPath}"`;
-    await execPromise(ffmpegCmd);
+    
+    try {
+      await execPromise(ffmpegCmd);
+      
+      // Verify the output file size
+      if (fs.existsSync(processedPath)) {
+        const stats = fs.statSync(processedPath);
+        if (stats.size < 1000) {
+          throw new Error("FFMPEG produced an empty or corrupted file");
+        }
+      } else {
+        throw new Error("FFMPEG did not produce an output file");
+      }
+    } catch (ffmpegErr) {
+      console.warn('Rubberband filter failed, trying lightweight fallback (asetrate/atempo)...', ffmpegErr);
+      
+      // Clean up the empty file if FFMPEG failed
+      if (fs.existsSync(processedPath)) {
+        fs.unlinkSync(processedPath);
+      }
+      
+      // Fallback command: very low memory usage, decent quality. Assumes 44100Hz input.
+      const fallbackCmd = `ffmpeg -i "${originalPath}" -af "asetrate=44100*${pitchRatio},atempo=1/${pitchRatio}" -y "${processedPath}"`;
+      await execPromise(fallbackCmd);
+      
+      if (fs.existsSync(processedPath)) {
+        const stats = fs.statSync(processedPath);
+        if (stats.size < 1000) {
+          throw new Error("FFMPEG fallback produced an empty or corrupted file");
+        }
+      } else {
+        throw new Error("FFMPEG fallback did not produce an output file");
+      }
+    }
 
     res.json({ cloudUrl: processedCloudUrl });
   } catch (error) {
     console.error('Error processing pitch:', error);
-    res.status(500).json({ error: 'Failed to process pitch' });
+    res.status(500).json({ error: 'Failed to process pitch. The server might have run out of memory.' });
   }
 };
 
