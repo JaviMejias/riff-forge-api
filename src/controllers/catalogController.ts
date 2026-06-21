@@ -48,7 +48,7 @@ export const searchCatalog = async (req: Request, res: Response) => {
 
 export const downloadCatalogTab = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const tab = await prisma.catalogTab.findUnique({ where: { id } });
 
     if (!tab) {
