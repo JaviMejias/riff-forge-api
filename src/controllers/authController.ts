@@ -29,7 +29,7 @@ export const signup = async (req: Request, res: Response) => {
     });
 
     // BE-10 fix: reduce token lifetime from 30 days to 24 hours
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
   } catch (error) {
     console.error(error);
@@ -57,7 +57,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // BE-10 fix: reduce token lifetime
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, uiStorage: user.uiStorage } });
   } catch (error) {
     console.error(error);
