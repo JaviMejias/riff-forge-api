@@ -7,16 +7,19 @@ export const searchCatalog = async (req: Request, res: Response) => {
   try {
     const { q = '', page = '1', limit = '50' } = req.query;
     const query = String(q).trim();
+    const queryWithUnderscores = query.replace(/\s+/g, '_');
     const pageNum = parseInt(String(page), 10) || 1;
     const limitNum = parseInt(String(limit), 10) || 50;
 
     const skip = (pageNum - 1) * limitNum;
 
-    // Search by title or artist using contains
+    // Search by title or artist using contains. Support both spaces and underscores.
     const whereClause = query ? {
       OR: [
         { title: { contains: query } },
-        { artist: { contains: query } }
+        { title: { contains: queryWithUnderscores } },
+        { artist: { contains: query } },
+        { artist: { contains: queryWithUnderscores } }
       ]
     } : {};
 
