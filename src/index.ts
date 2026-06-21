@@ -17,6 +17,8 @@ import catalogRoutes from './routes/catalogRoutes';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (Nginx/Cloudflare) to get real client IPs for rate limiting
+
 const PORT = process.env.PORT || 3001;
 
 // M-8 fix: add helmet security headers
@@ -41,7 +43,7 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // limit each IP to 20 login/signup requests per hour
+  max: 100, // limit each IP to 100 login/signup requests per hour (increased to prevent blocking)
   message: { error: 'Too many authentication attempts, please try again later' }
 });
 
