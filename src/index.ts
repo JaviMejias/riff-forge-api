@@ -12,6 +12,7 @@ import playlistRoutes from './routes/playlistRoutes';
 
 import youtubeRoutes from './routes/youtubeRoutes';
 import communityRoutes from './routes/communityRoutes';
+import catalogRoutes from './routes/catalogRoutes';
 
 dotenv.config();
 
@@ -53,6 +54,7 @@ app.use('/api/karaokes', karaokeRoutes);
 app.use('/api', playlistRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/community', communityRoutes);
+app.use('/api/catalog', catalogRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

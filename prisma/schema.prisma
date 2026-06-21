@@ -94,3 +94,14 @@ model CustomChord {
   updatedAt BigInt
   isPublic  Boolean @default(false)
 }
+
+model CatalogTab {
+  id        String   @id @default(uuid())
+  artist    String
+  title     String
+  format    String   // gp3, gp4, gp5, gpx
+  filePath  String   // Local path to the extracted file
+  createdAt DateTime @default(now())
+
+  @@index([artist, title])
+}
