@@ -5,3 +5,8 @@ node_modules
 /src/generated/prisma
 data/
 uploads/
+
+# Scratch and test files
+test*.js
+test*.mp3
+prisma/dev.db
