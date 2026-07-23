@@ -5,6 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { exec } from 'child_process';
 import util from 'util';
+import youtubedl from 'youtube-dl-exec';
 const execPromise = util.promisify(exec);
 // Helper to serialize BigInts
 const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, value) =>
@@ -137,7 +138,7 @@ export const downloadAudio = async (req: Request, res: Response) => {
     const filename = `${crypto.randomUUID()}.mp3`;
     outputPath = path.join(__dirname, '../../uploads', filename);
 
-    // 1. Extraer ID del video de YouTube
+    // 1. Extraer ID del video de YouTube (opcional, youtube-dl acepta URL completa, pero validamos que sea YT)
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
     const videoId = match ? match[1] : null;
 
@@ -145,43 +146,27 @@ export const downloadAudio = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'URL de YouTube inválida' });
     }
 
-    // 2. Pedir a RapidAPI que genere el MP3
-    const apiKey = process.env.RAPIDAPI_KEY;
-    if (!apiKey) return res.status(500).json({ error: 'RAPIDAPI_KEY no configurada en el servidor' });
-    const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
-      headers: {
-        'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
-        'x-rapidapi-key': apiKey
-      }
+    // 2. Descargar y convertir a MP3 usando youtube-dl-exec (yt-dlp)
+    console.log(`Downloading audio for ${videoId}...`);
+    await youtubedl(url, {
+      extractAudio: true,
+      audioFormat: 'mp3',
+      output: outputPath,
+      noCheckCertificates: true,
+      noWarnings: true,
+      preferFreeFormats: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      ]
     });
 
-    if (!apiRes.ok) throw new Error(`RapidAPI failed: ${apiRes.status}`);
+    console.log(`Audio downloaded successfully to ${outputPath}`);
 
-    const data = await apiRes.json();
-    if (data.status !== 'ok' || !data.link) {
-      throw new Error(`RapidAPI Error: ${JSON.stringify(data)}`);
-    }
-
-    // 3. Descargar el MP3 desde el link generado
-    const fileRes = await fetch(data.link);
-    if (!fileRes.ok || !fileRes.body) {
-      throw new Error(`Failed to download MP3 from RapidAPI link: ${fileRes.status}`);
-    }
-
-    // 4. Guardarlo en la carpeta uploads de Oracle Cloud
-    const fileStream = fs.createWriteStream(outputPath);
-    const readable = Readable.fromWeb(fileRes.body as any);
-    readable.pipe(fileStream);
-
-    await new Promise((resolve, reject) => {
-      fileStream.on('finish', resolve);
-      fileStream.on('error', reject);
-    });
-
-    // 5. Devolver el enlace local
+    // 3. Devolver el enlace local
     res.json({ cloudUrl: `/uploads/${filename}` });
   } catch (error) {
-    console.error('Error downloading audio via RapidAPI:', error);
+    console.error('Error downloading audio via youtube-dl:', error);
     // M-11 fix: remove partial file if it failed
     if (fs.existsSync(outputPath)) {
       try {
@@ -330,5 +315,46 @@ export const fetchLyrics = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching lyrics:', error);
     res.status(500).json({ error: 'Failed to fetch lyrics' });
+  }
+};
+
+export const getYouTubeMetadata = async (req: Request, res: Response) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+
+  try {
+    const data = await youtubedl(url, {
+      dumpJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      ]
+    });
+    // @ts-ignore
+    res.json({ title: data.title });
+  } catch (error) {
+    console.error('Error fetching youtube metadata:', error);
+    res.status(500).json({ error: 'Failed to fetch youtube metadata' });
+  }
+};
+
+export const deleteAudio = async (req: Request, res: Response) => {
+  const { cloudUrl } = req.body;
+  if (!cloudUrl) return res.status(400).json({ error: 'cloudUrl is required' });
+
+  try {
+    const filePath = path.join(__dirname, '../../', cloudUrl);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return res.json({ success: true, message: 'File deleted' });
+    }
+    return res.status(404).json({ error: 'File not found' });
+  } catch (error) {
+    console.error('Error deleting audio:', error);
+    res.status(500).json({ error: 'Failed to delete audio file' });
   }
 };

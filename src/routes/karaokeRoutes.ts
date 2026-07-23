@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getKaraokes, createKaraoke, updateKaraoke, deleteKaraoke, downloadAudio, fetchLyrics, processPitch } from '../controllers/karaokeController';
+import { getKaraokes, createKaraoke, updateKaraoke, deleteKaraoke, downloadAudio, fetchLyrics, processPitch, getYouTubeMetadata, deleteAudio } from '../controllers/karaokeController';
 import { authenticate } from '../middleware/authMiddleware';
 import { upload } from '../utils/upload';
 
@@ -10,7 +10,9 @@ router.get('/lyrics', fetchLyrics);
 
 // All other routes require authentication
 router.use(authenticate);
+router.get('/youtube-metadata', getYouTubeMetadata);
 router.post('/download-audio', downloadAudio);  // BE-4 fix: was unprotected
+router.post('/delete-audio', deleteAudio);
 router.get('/', getKaraokes);
 router.post('/', upload.single('file'), createKaraoke);
 router.put('/:id', upload.single('file'), updateKaraoke);
