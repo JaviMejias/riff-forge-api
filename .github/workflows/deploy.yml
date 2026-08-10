@@ -1,0 +1,80 @@
+name: Deploy backend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Check TypeScript
+        run: npx tsc --noEmit
+
+  deploy:
+    name: Deploy to Oracle
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Update and restart backend
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          BACKEND_PATH: ${{ secrets.BACKEND_PATH }}
+          COMPOSE_PATH: ${{ secrets.COMPOSE_PATH }}
+        run: |
+          printf -v backend_path '%q' "$BACKEND_PATH"
+          printf -v compose_path '%q' "$COMPOSE_PATH"
+
+          ssh -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" \
+            "BACKEND_PATH=${backend_path} COMPOSE_PATH=${compose_path} bash -se" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$BACKEND_PATH"
+          test "$(git branch --show-current)" = "main"
+          git pull --ff-only origin main
+
+          cd "$COMPOSE_PATH"
+          sudo -n docker compose build backend
+          sudo -n docker compose up -d --no-deps backend
+          sudo -n docker compose ps backend
+          REMOTE

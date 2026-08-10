@@ -1,6 +1,7 @@
+import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -13,8 +14,6 @@ import playlistRoutes from './routes/playlistRoutes';
 import youtubeRoutes from './routes/youtubeRoutes';
 import communityRoutes from './routes/communityRoutes';
 import catalogRoutes from './routes/catalogRoutes';
-
-dotenv.config();
 
 const app = express();
 app.set('trust proxy', 1); // Trust first proxy (Nginx/Cloudflare) to get real client IPs for rate limiting
