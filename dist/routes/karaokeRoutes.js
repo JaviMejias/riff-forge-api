@@ -9,7 +9,9 @@ const router = (0, express_1.Router)();
 router.get('/lyrics', karaokeController_1.fetchLyrics);
 // All other routes require authentication
 router.use(authMiddleware_1.authenticate);
+router.get('/youtube-metadata', karaokeController_1.getYouTubeMetadata);
 router.post('/download-audio', karaokeController_1.downloadAudio); // BE-4 fix: was unprotected
+router.post('/delete-audio', karaokeController_1.deleteAudio);
 router.get('/', karaokeController_1.getKaraokes);
 router.post('/', upload_1.upload.single('file'), karaokeController_1.createKaraoke);
 router.put('/:id', upload_1.upload.single('file'), karaokeController_1.updateKaraoke);

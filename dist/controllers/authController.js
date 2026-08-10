@@ -29,7 +29,7 @@ const signup = async (req, res) => {
             data: { email, passwordHash, name }
         });
         // BE-10 fix: reduce token lifetime from 30 days to 24 hours
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
     }
     catch (error) {
@@ -54,7 +54,7 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
         // BE-10 fix: reduce token lifetime
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name, uiStorage: user.uiStorage } });
     }
     catch (error) {

@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "npx prisma db push && tsc",
-    "start": "npx prisma db push && node dist/index.js"
+    "start": "npx prisma db push && node dist/index.js",
+    "test": "npx prisma generate && tsc && node --test tests/*.test.js",
+    "cleanup:sync": "node dist/scripts/cleanup-sync.js"
   },
   "keywords": [],
   "author": "",

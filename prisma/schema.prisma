@@ -19,6 +19,8 @@ model User {
   playlists        Playlist[]
   karaokePlaylists KaraokePlaylist[]
   customChords     CustomChord[]
+  syncChanges      SyncChange[]
+  syncOperations   ProcessedSyncOperation[]
   uiStorage        String? // Stores UI preferences as a JSON string
 }
 
@@ -38,8 +40,17 @@ model Song {
   capo             String?
   dateAdded        BigInt // Unix timestamp
   updatedAt        BigInt // Unix timestamp
+  createdAt        BigInt      @default(0)
+  deletedAt        BigInt?
+  version          Int         @default(1)
+  fileVersion      Int         @default(0)
+  fileHash         String?
+  fileSize         BigInt?
+  fileMimeType     String?
   isPublic         Boolean    @default(false)
   playlists        Playlist[] @relation("PlaylistToSong")
+
+  @@index([userId, deletedAt])
 }
 
 model Karaoke {
@@ -55,8 +66,17 @@ model Karaoke {
   textContent      String? // Synced lyrics
   dateAdded        BigInt
   updatedAt        BigInt
+  createdAt        BigInt             @default(0)
+  deletedAt        BigInt?
+  version          Int                @default(1)
+  fileVersion      Int                @default(0)
+  fileHash         String?
+  fileSize         BigInt?
+  fileMimeType     String?
   isPublic         Boolean           @default(false)
   karaokePlaylists KaraokePlaylist[] @relation("KaraokePlaylistToKaraoke")
+
+  @@index([userId, deletedAt])
 }
 
 model Playlist {
@@ -66,8 +86,13 @@ model Playlist {
   name      String
   createdAt BigInt
   updatedAt BigInt
+  deletedAt BigInt?
+  version   Int      @default(1)
+  songCloudIds String @default("[]")
   isPublic  Boolean  @default(false)
   songs     Song[]   @relation("PlaylistToSong")
+
+  @@index([userId, deletedAt])
 }
 
 model KaraokePlaylist {
@@ -77,8 +102,13 @@ model KaraokePlaylist {
   name      String
   createdAt BigInt
   updatedAt BigInt
+  deletedAt BigInt?
+  version   Int       @default(1)
+  karaokeCloudIds String @default("[]")
   isPublic  Boolean   @default(false)
   karaokes  Karaoke[] @relation("KaraokePlaylistToKaraoke")
+
+  @@index([userId, deletedAt])
 }
 
 model CustomChord {
@@ -92,7 +122,40 @@ model CustomChord {
   baseFret  Int
   barres    String? // JSON array as string
   updatedAt BigInt
+  createdAt BigInt  @default(0)
+  deletedAt BigInt?
+  version   Int     @default(1)
   isPublic  Boolean @default(false)
+
+  @@index([userId, deletedAt])
+}
+
+model SyncChange {
+  sequence   Int      @id @default(autoincrement())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType String
+  entityId   String
+  version    Int
+  action     String
+  payload    String?
+  createdAt  BigInt
+
+  @@index([userId, sequence])
+  @@index([userId, entityType, entityId])
+}
+
+model ProcessedSyncOperation {
+  id          Int    @id @default(autoincrement())
+  userId      String
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId    String
+  operationId String
+  result      String
+  createdAt   BigInt
+
+  @@unique([userId, deviceId, operationId])
+  @@index([userId, createdAt])
 }
 
 model CatalogTab {

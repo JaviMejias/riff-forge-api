@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import { exec } from 'child_process';
 import util from 'util';
 import youtubedl from 'youtube-dl-exec';
+import { fileMetadata, safeUploadPath } from '../services/fileMetadata';
+import { recordChange } from '../services/syncService';
 const execPromise = util.promisify(exec);
 // Helper to serialize BigInts
 const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, value) =>
@@ -15,7 +17,7 @@ const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, valu
 export const getKaraokes = async (req: Request, res: Response) => {
   const userId = req.userId;
   try {
-    const karaokes = await prisma.karaoke.findMany({ where: { userId } });
+    const karaokes = await prisma.karaoke.findMany({ where: { userId, deletedAt: null } });
     res.json(serializeBigInts(karaokes));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch karaokes' });
@@ -32,8 +34,10 @@ export const createKaraoke = async (req: Request, res: Response) => {
       cloudUrl = `/uploads/${req.file.filename}`;
     }
 
-    const karaoke = await prisma.karaoke.create({
-      data: {
+    const now = Date.now();
+    const metadata = fileMetadata(cloudUrl, req.file && req.file.mimetype);
+    const karaoke = await prisma.$transaction(async (tx: any) => {
+      const created = await tx.karaoke.create({ data: {
         id: data.id,
         userId,
         name: data.name,
@@ -44,9 +48,15 @@ export const createKaraoke = async (req: Request, res: Response) => {
         pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
         textContent: data.textContent,
         isPublic: data.isPublic === 'true' || data.isPublic === true,
-        dateAdded: BigInt(data.dateAdded || Date.now()),
-        updatedAt: BigInt(data.updatedAt || Date.now())
-      }
+        dateAdded: BigInt(data.dateAdded || now),
+        createdAt: BigInt(now),
+        updatedAt: BigInt(now),
+        version: 1,
+        fileVersion: cloudUrl ? 1 : 0,
+        ...metadata
+      } });
+      await recordChange(tx, userId!, 'karaoke', created.id, created.version, 'upsert', now);
+      return created;
     });
     
     res.json(serializeBigInts(karaoke));
@@ -61,7 +71,7 @@ export const updateKaraoke = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   try {
     const data = req.body;
-    let cloudUrl = data.cloudUrl;
+    let cloudUrl: string | undefined;
     let hasLocalAudio = data.hasLocalAudio;
 
     if (req.file) {
@@ -71,8 +81,8 @@ export const updateKaraoke = async (req: Request, res: Response) => {
       hasLocalAudio = hasLocalAudio === 'true' || hasLocalAudio === true;
     }
 
-    const existing = await prisma.karaoke.findUnique({ where: { id } });
-    if (!existing || existing.userId !== userId) {
+    const existing: any = await prisma.karaoke.findUnique({ where: { id } });
+    if (!existing || existing.userId !== userId || existing.deletedAt !== null) {
       return res.status(404).json({ error: 'Karaoke not found' });
     }
 
@@ -80,12 +90,14 @@ export const updateKaraoke = async (req: Request, res: Response) => {
       name: data.name,
       artist: data.artist,
       youtubeUrl: data.youtubeUrl,
-      cloudUrl: cloudUrl,
+      cloudUrl: req.file ? cloudUrl : existing.cloudUrl,
       hasLocalAudio: hasLocalAudio,
       pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
       textContent: data.textContent,
-      updatedAt: BigInt(Date.now())
+      updatedAt: BigInt(Date.now()),
+      version: existing.version + 1
     };
+    if (req.file) Object.assign(updateData, fileMetadata(cloudUrl, req.file.mimetype), { fileVersion: existing.fileVersion + 1 });
 
     if (data.isPublic !== undefined) {
       updateData.isPublic = data.isPublic === 'true' || data.isPublic === true;
@@ -93,9 +105,10 @@ export const updateKaraoke = async (req: Request, res: Response) => {
 
     if (data.dateAdded) updateData.dateAdded = BigInt(data.dateAdded);
 
-    const karaoke = await prisma.karaoke.update({
-      where: { id },
-      data: updateData
+    const karaoke = await prisma.$transaction(async (tx: any) => {
+      const updated = await tx.karaoke.update({ where: { id }, data: updateData });
+      await recordChange(tx, userId!, 'karaoke', id, updated.version, 'upsert');
+      return updated;
     });
     
     res.json(serializeBigInts(karaoke));
@@ -108,19 +121,16 @@ export const deleteKaraoke = async (req: Request, res: Response) => {
   const userId = req.userId;
   const id = req.params.id as string;
   try {
-    const existing = await prisma.karaoke.findUnique({ where: { id } });
-    if (!existing || existing.userId !== userId) {
+    const existing: any = await prisma.karaoke.findUnique({ where: { id } });
+    if (!existing || existing.userId !== userId || existing.deletedAt !== null) {
       return res.status(404).json({ error: 'Karaoke not found' });
     }
 
-    if (existing.cloudUrl) {
-      const filePath = path.join(__dirname, '../../', existing.cloudUrl);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
-
-    await prisma.karaoke.delete({ where: { id } });
+    const now = Date.now();
+    await prisma.$transaction(async (tx: any) => {
+      const updated = await tx.karaoke.update({ where: { id }, data: { deletedAt: BigInt(now), updatedAt: BigInt(now), version: existing.version + 1, isPublic: false } });
+      await recordChange(tx, userId!, 'karaoke', id, updated.version, 'delete', now);
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete karaoke' });
@@ -347,12 +357,17 @@ export const deleteAudio = async (req: Request, res: Response) => {
   if (!cloudUrl) return res.status(400).json({ error: 'cloudUrl is required' });
 
   try {
-    const filePath = path.join(__dirname, '../../', cloudUrl);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      return res.json({ success: true, message: 'File deleted' });
-    }
-    return res.status(404).json({ error: 'File not found' });
+    const owned: any = await prisma.karaoke.findFirst({ where: { userId: req.userId, cloudUrl, deletedAt: null } });
+    if (!owned) return res.status(404).json({ error: 'Audio not found' });
+    const filePath = safeUploadPath(cloudUrl);
+    if (!filePath) return res.status(400).json({ error: 'Invalid cloudUrl' });
+    const now = Date.now();
+    await prisma.$transaction(async (tx: any) => {
+      const updated = await tx.karaoke.update({ where: { id: owned.id }, data: { cloudUrl: null, hasLocalAudio: false, fileHash: null, fileSize: null, fileMimeType: null, fileVersion: owned.fileVersion + 1, version: owned.version + 1, updatedAt: BigInt(now) } });
+      await recordChange(tx, req.userId!, 'karaoke', owned.id, updated.version, 'upsert', now);
+    });
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    return res.json({ success: true, message: 'File deleted' });
   } catch (error) {
     console.error('Error deleting audio:', error);
     res.status(500).json({ error: 'Failed to delete audio file' });

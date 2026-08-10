@@ -3,20 +3,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchLyrics = exports.processPitch = exports.downloadAudio = exports.deleteKaraoke = exports.updateKaraoke = exports.createKaraoke = exports.getKaraokes = void 0;
+exports.deleteAudio = exports.getYouTubeMetadata = exports.fetchLyrics = exports.processPitch = exports.downloadAudio = exports.deleteKaraoke = exports.updateKaraoke = exports.createKaraoke = exports.getKaraokes = void 0;
 const prisma_1 = require("../utils/prisma");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const crypto_1 = __importDefault(require("crypto"));
 const child_process_1 = require("child_process");
 const util_1 = __importDefault(require("util"));
+const youtube_dl_exec_1 = __importDefault(require("youtube-dl-exec"));
+const fileMetadata_1 = require("../services/fileMetadata");
+const syncService_1 = require("../services/syncService");
 const execPromise = util_1.default.promisify(child_process_1.exec);
 // Helper to serialize BigInts
 const serializeBigInts = (obj) => JSON.parse(JSON.stringify(obj, (key, value) => typeof value === 'bigint' ? value.toString() : value));
 const getKaraokes = async (req, res) => {
     const userId = req.userId;
     try {
-        const karaokes = await prisma_1.prisma.karaoke.findMany({ where: { userId } });
+        const karaokes = await prisma_1.prisma.karaoke.findMany({ where: { userId, deletedAt: null } });
         res.json(serializeBigInts(karaokes));
     }
     catch (error) {
@@ -32,21 +35,29 @@ const createKaraoke = async (req, res) => {
         if (req.file) {
             cloudUrl = `/uploads/${req.file.filename}`;
         }
-        const karaoke = await prisma_1.prisma.karaoke.create({
-            data: {
-                id: data.id,
-                userId,
-                name: data.name,
-                artist: data.artist,
-                youtubeUrl: data.youtubeUrl,
-                cloudUrl: cloudUrl,
-                hasLocalAudio: req.file ? true : (data.hasLocalAudio === 'true' || data.hasLocalAudio === true),
-                pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
-                textContent: data.textContent,
-                isPublic: data.isPublic === 'true' || data.isPublic === true,
-                dateAdded: BigInt(data.dateAdded || Date.now()),
-                updatedAt: BigInt(data.updatedAt || Date.now())
-            }
+        const now = Date.now();
+        const metadata = (0, fileMetadata_1.fileMetadata)(cloudUrl, req.file && req.file.mimetype);
+        const karaoke = await prisma_1.prisma.$transaction(async (tx) => {
+            const created = await tx.karaoke.create({ data: {
+                    id: data.id,
+                    userId,
+                    name: data.name,
+                    artist: data.artist,
+                    youtubeUrl: data.youtubeUrl,
+                    cloudUrl: cloudUrl,
+                    hasLocalAudio: req.file ? true : (data.hasLocalAudio === 'true' || data.hasLocalAudio === true),
+                    pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
+                    textContent: data.textContent,
+                    isPublic: data.isPublic === 'true' || data.isPublic === true,
+                    dateAdded: BigInt(data.dateAdded || now),
+                    createdAt: BigInt(now),
+                    updatedAt: BigInt(now),
+                    version: 1,
+                    fileVersion: cloudUrl ? 1 : 0,
+                    ...metadata
+                } });
+            await (0, syncService_1.recordChange)(tx, userId, 'karaoke', created.id, created.version, 'upsert', now);
+            return created;
         });
         res.json(serializeBigInts(karaoke));
     }
@@ -61,7 +72,7 @@ const updateKaraoke = async (req, res) => {
     const id = req.params.id;
     try {
         const data = req.body;
-        let cloudUrl = data.cloudUrl;
+        let cloudUrl;
         let hasLocalAudio = data.hasLocalAudio;
         if (req.file) {
             cloudUrl = `/uploads/${req.file.filename}`;
@@ -71,27 +82,31 @@ const updateKaraoke = async (req, res) => {
             hasLocalAudio = hasLocalAudio === 'true' || hasLocalAudio === true;
         }
         const existing = await prisma_1.prisma.karaoke.findUnique({ where: { id } });
-        if (!existing || existing.userId !== userId) {
+        if (!existing || existing.userId !== userId || existing.deletedAt !== null) {
             return res.status(404).json({ error: 'Karaoke not found' });
         }
         const updateData = {
             name: data.name,
             artist: data.artist,
             youtubeUrl: data.youtubeUrl,
-            cloudUrl: cloudUrl,
+            cloudUrl: req.file ? cloudUrl : existing.cloudUrl,
             hasLocalAudio: hasLocalAudio,
             pitchShift: data.pitchShift ? parseFloat(data.pitchShift) : null,
             textContent: data.textContent,
-            updatedAt: BigInt(Date.now())
+            updatedAt: BigInt(Date.now()),
+            version: existing.version + 1
         };
+        if (req.file)
+            Object.assign(updateData, (0, fileMetadata_1.fileMetadata)(cloudUrl, req.file.mimetype), { fileVersion: existing.fileVersion + 1 });
         if (data.isPublic !== undefined) {
             updateData.isPublic = data.isPublic === 'true' || data.isPublic === true;
         }
         if (data.dateAdded)
             updateData.dateAdded = BigInt(data.dateAdded);
-        const karaoke = await prisma_1.prisma.karaoke.update({
-            where: { id },
-            data: updateData
+        const karaoke = await prisma_1.prisma.$transaction(async (tx) => {
+            const updated = await tx.karaoke.update({ where: { id }, data: updateData });
+            await (0, syncService_1.recordChange)(tx, userId, 'karaoke', id, updated.version, 'upsert');
+            return updated;
         });
         res.json(serializeBigInts(karaoke));
     }
@@ -105,16 +120,14 @@ const deleteKaraoke = async (req, res) => {
     const id = req.params.id;
     try {
         const existing = await prisma_1.prisma.karaoke.findUnique({ where: { id } });
-        if (!existing || existing.userId !== userId) {
+        if (!existing || existing.userId !== userId || existing.deletedAt !== null) {
             return res.status(404).json({ error: 'Karaoke not found' });
         }
-        if (existing.cloudUrl) {
-            const filePath = path_1.default.join(__dirname, '../../', existing.cloudUrl);
-            if (fs_1.default.existsSync(filePath)) {
-                fs_1.default.unlinkSync(filePath);
-            }
-        }
-        await prisma_1.prisma.karaoke.delete({ where: { id } });
+        const now = Date.now();
+        await prisma_1.prisma.$transaction(async (tx) => {
+            const updated = await tx.karaoke.update({ where: { id }, data: { deletedAt: BigInt(now), updatedAt: BigInt(now), version: existing.version + 1, isPublic: false } });
+            await (0, syncService_1.recordChange)(tx, userId, 'karaoke', id, updated.version, 'delete', now);
+        });
         res.json({ success: true });
     }
     catch (error) {
@@ -122,7 +135,6 @@ const deleteKaraoke = async (req, res) => {
     }
 };
 exports.deleteKaraoke = deleteKaraoke;
-const stream_1 = require("stream");
 const downloadAudio = async (req, res) => {
     const { url } = req.body;
     if (!url)
@@ -131,46 +143,32 @@ const downloadAudio = async (req, res) => {
     try {
         const filename = `${crypto_1.default.randomUUID()}.mp3`;
         outputPath = path_1.default.join(__dirname, '../../uploads', filename);
-        // 1. Extraer ID del video de YouTube
+        // 1. Extraer ID del video de YouTube (opcional, youtube-dl acepta URL completa, pero validamos que sea YT)
         const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
         const videoId = match ? match[1] : null;
         if (!videoId) {
             return res.status(400).json({ error: 'URL de YouTube inválida' });
         }
-        // 2. Pedir a RapidAPI que genere el MP3
-        const apiKey = process.env.RAPIDAPI_KEY;
-        if (!apiKey)
-            return res.status(500).json({ error: 'RAPIDAPI_KEY no configurada en el servidor' });
-        const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
-            headers: {
-                'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
-                'x-rapidapi-key': apiKey
-            }
+        // 2. Descargar y convertir a MP3 usando youtube-dl-exec (yt-dlp)
+        console.log(`Downloading audio for ${videoId}...`);
+        await (0, youtube_dl_exec_1.default)(url, {
+            extractAudio: true,
+            audioFormat: 'mp3',
+            output: outputPath,
+            noCheckCertificates: true,
+            noWarnings: true,
+            preferFreeFormats: true,
+            addHeader: [
+                'referer:youtube.com',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ]
         });
-        if (!apiRes.ok)
-            throw new Error(`RapidAPI failed: ${apiRes.status}`);
-        const data = await apiRes.json();
-        if (data.status !== 'ok' || !data.link) {
-            throw new Error(`RapidAPI Error: ${JSON.stringify(data)}`);
-        }
-        // 3. Descargar el MP3 desde el link generado
-        const fileRes = await fetch(data.link);
-        if (!fileRes.ok || !fileRes.body) {
-            throw new Error(`Failed to download MP3 from RapidAPI link: ${fileRes.status}`);
-        }
-        // 4. Guardarlo en la carpeta uploads de Oracle Cloud
-        const fileStream = fs_1.default.createWriteStream(outputPath);
-        const readable = stream_1.Readable.fromWeb(fileRes.body);
-        readable.pipe(fileStream);
-        await new Promise((resolve, reject) => {
-            fileStream.on('finish', resolve);
-            fileStream.on('error', reject);
-        });
-        // 5. Devolver el enlace local
+        console.log(`Audio downloaded successfully to ${outputPath}`);
+        // 3. Devolver el enlace local
         res.json({ cloudUrl: `/uploads/${filename}` });
     }
     catch (error) {
-        console.error('Error downloading audio via RapidAPI:', error);
+        console.error('Error downloading audio via youtube-dl:', error);
         // M-11 fix: remove partial file if it failed
         if (fs_1.default.existsSync(outputPath)) {
             try {
@@ -306,3 +304,53 @@ const fetchLyrics = async (req, res) => {
     }
 };
 exports.fetchLyrics = fetchLyrics;
+const getYouTubeMetadata = async (req, res) => {
+    const { url } = req.query;
+    if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+    try {
+        const data = await (0, youtube_dl_exec_1.default)(url, {
+            dumpJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:youtube.com',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ]
+        });
+        // @ts-ignore
+        res.json({ title: data.title });
+    }
+    catch (error) {
+        console.error('Error fetching youtube metadata:', error);
+        res.status(500).json({ error: 'Failed to fetch youtube metadata' });
+    }
+};
+exports.getYouTubeMetadata = getYouTubeMetadata;
+const deleteAudio = async (req, res) => {
+    const { cloudUrl } = req.body;
+    if (!cloudUrl)
+        return res.status(400).json({ error: 'cloudUrl is required' });
+    try {
+        const owned = await prisma_1.prisma.karaoke.findFirst({ where: { userId: req.userId, cloudUrl, deletedAt: null } });
+        if (!owned)
+            return res.status(404).json({ error: 'Audio not found' });
+        const filePath = (0, fileMetadata_1.safeUploadPath)(cloudUrl);
+        if (!filePath)
+            return res.status(400).json({ error: 'Invalid cloudUrl' });
+        const now = Date.now();
+        await prisma_1.prisma.$transaction(async (tx) => {
+            const updated = await tx.karaoke.update({ where: { id: owned.id }, data: { cloudUrl: null, hasLocalAudio: false, fileHash: null, fileSize: null, fileMimeType: null, fileVersion: owned.fileVersion + 1, version: owned.version + 1, updatedAt: BigInt(now) } });
+            await (0, syncService_1.recordChange)(tx, req.userId, 'karaoke', owned.id, updated.version, 'upsert', now);
+        });
+        if (fs_1.default.existsSync(filePath))
+            fs_1.default.unlinkSync(filePath);
+        return res.json({ success: true, message: 'File deleted' });
+    }
+    catch (error) {
+        console.error('Error deleting audio:', error);
+        res.status(500).json({ error: 'Failed to delete audio file' });
+    }
+};
+exports.deleteAudio = deleteAudio;
