@@ -1,58 +1,61 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
+import { pageResult, paginationHeaders, parsePagination } from '../services/pagination';
 
-// Helper to serialize BigInts
-const serializeBigInts = (obj: any) => JSON.parse(JSON.stringify(obj, (key, value) =>
-    typeof value === 'bigint' ? value.toString() : value
+const serializeBigInts = (value: unknown) => JSON.parse(JSON.stringify(value, (_key, item) =>
+  typeof item === 'bigint' ? item.toString() : item
 ));
 
-export const getPublicSongs = async (req: Request, res: Response) => {
+export const getPublicSongs = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const songs = await prisma.song.findMany({ 
+    const pagination = parsePagination(req.query);
+    const songs = await prisma.song.findMany({
       where: { isPublic: true, deletedAt: null },
-      orderBy: { dateAdded: 'desc' },
-      take: 50,
-      include: {
-        user: { select: { id: true, name: true } }
-      }
+      orderBy: [{ dateAdded: 'desc' }, { id: 'asc' }],
+      skip: pagination.skip,
+      take: pagination.limit + 1,
+      include: { user: { select: { id: true, name: true } } }
     });
-
-    res.json(serializeBigInts(songs));
+    const result = pageResult(songs, pagination);
+    res.set(paginationHeaders(result));
+    res.json(serializeBigInts(result.items));
   } catch (error) {
-    console.error('Error fetching public songs:', error);
-    res.status(500).json({ error: 'Failed to fetch public songs' });
+    next(error);
   }
 };
 
-export const getPublicKaraokes = async (req: Request, res: Response) => {
+export const getPublicKaraokes = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const karaokes = await prisma.karaoke.findMany({ 
+    const pagination = parsePagination(req.query);
+    const karaokes = await prisma.karaoke.findMany({
       where: { isPublic: true, deletedAt: null },
-      orderBy: { dateAdded: 'desc' },
-      take: 50,
-      include: {
-        user: { select: { id: true, name: true } }
-      }
+      orderBy: [{ dateAdded: 'desc' }, { id: 'asc' }],
+      skip: pagination.skip,
+      take: pagination.limit + 1,
+      include: { user: { select: { id: true, name: true } } }
     });
-
-    res.json(serializeBigInts(karaokes));
+    const result = pageResult(karaokes, pagination);
+    res.set(paginationHeaders(result));
+    res.json(serializeBigInts(result.items));
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch public karaokes' });
+    next(error);
   }
 };
 
-export const getPublicCustomChords = async (req: Request, res: Response) => {
+export const getPublicCustomChords = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const chords = await prisma.customChord.findMany({ 
+    const pagination = parsePagination(req.query);
+    const chords = await prisma.customChord.findMany({
       where: { isPublic: true, deletedAt: null },
-      include: {
-        user: { select: { id: true, name: true } }
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 50
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      skip: pagination.skip,
+      take: pagination.limit + 1,
+      include: { user: { select: { id: true, name: true } } }
     });
-    res.json(serializeBigInts(chords));
+    const result = pageResult(chords, pagination);
+    res.set(paginationHeaders(result));
+    res.json(serializeBigInts(result.items));
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch public chords' });
+    next(error);
   }
 };

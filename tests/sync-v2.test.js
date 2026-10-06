@@ -1,20 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { createEnvironment } = require('./helpers/environment');
+const environment = createEnvironment('riff-forge-sync-');
 
-const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'riff-forge-sync-'));
-process.env.DATABASE_URL = `file:${path.join(testDir, 'sync.db')}`;
-process.env.JWT_SECRET = 'integration-test-secret-with-sufficient-length';
-for (const migration of ['20260621012303_init_catalog', '20260810000000_add_sync_v2']) {
-  execFileSync('npx', ['prisma', 'db', 'execute', '--url', process.env.DATABASE_URL, '--file', path.join(__dirname, '..', 'prisma', 'migrations', migration, 'migration.sql')], { cwd: path.join(__dirname, '..'), env: process.env, stdio: 'pipe' });
-}
-
-const { app } = require('../dist/index');
-const { prisma } = require('../dist/utils/prisma');
+const { app } = environment.load('index');
+const { prisma } = environment.load('utils/prisma');
 const jwt = require('jsonwebtoken');
 let server;
 let baseUrl;
@@ -52,7 +43,7 @@ test.before(async () => {
 test.after(async () => {
   await new Promise(resolve => server.close(resolve));
   await prisma.$disconnect();
-  fs.rmSync(testDir, { recursive: true, force: true });
+  environment.cleanup();
 });
 
 test('create on one device and download on another, including offline catch-up', async () => {
@@ -77,6 +68,7 @@ test('edit lyrics and metadata with a server version', async () => {
 test('legacy file replacement increments fileVersion and is synchronized', async () => {
   const form = new FormData();
   form.set('name', 'Renamed');
+  form.set('baseVersion', '2');
   form.set('file', new Blob(['guitar-pro-data'], { type: 'application/octet-stream' }), 'song.gp5');
   const updated = await request(`/api/songs/${global.songId}`, tokenA, { method: 'PUT', body: form });
   assert.equal(updated.status, 200);

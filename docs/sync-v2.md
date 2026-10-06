@@ -28,7 +28,9 @@
 }
 ```
 
-`deviceId`, `operationId` and `entityId` must be UUIDs. `baseVersion` is `0` only for creation and must equal the last server version for edits/deletes. `clientUpdatedAt` is accepted for diagnostics but never orders writes. A client-controlled `userId`, version, timestamp, cursor content, file path or file URL is ignored or rejected.
+`deviceId`, `operationId` and `entityId` must be UUID strings. `baseVersion` is an integer number from 0 through 2147483647; `0` is only for creation and edits/deletes must match the last server version. Optional `clientUpdatedAt` must be a nonnegative numeric timestamp, accepted for diagnostics but never used to order writes. A client-controlled `userId`, version, server timestamp, cursor content, file path or file URL is ignored or rejected.
+
+Names cannot be blank, metadata booleans must be JSON booleans, and dates/pitch are validated before writing. See [input-validation.md](input-validation.md) for the stricter field-type rules and legacy multipart compatibility.
 
 Allowed data fields:
 
@@ -85,8 +87,12 @@ Valid operations in a request are handled in one database transaction. Expected 
 
 ## Files
 
-Binary transfer remains multipart through `POST /api/songs`, `PUT /api/songs/:id`, `POST /api/karaokes` and `PUT /api/karaokes/:id`. The sync endpoint never accepts a client file path or URL. After upload commits, sync publishes the current public URL, monotonically increasing `file.version`, SHA-256, byte size and MIME type. Replaced files become orphans and are removed later by `npm run cleanup:sync`; they are not deleted before the database commit.
+Binary transfer remains multipart through `POST /api/songs`, `PUT /api/songs/:id`, `POST /api/karaokes` and `PUT /api/karaokes/:id`. The sync endpoint never accepts a client file path or URL. After upload commits, sync publishes the current file URL, monotonically increasing `file.version`, SHA-256, byte size and MIME type. Replaced files are not deleted before the database commit. A replaced version remains protected while a retained immutable sync snapshot or operation result references it; it is not automatically an orphan.
 
 ## Retention
 
-Tombstones are retained indefinitely by default, which prevents an arbitrarily old client from resurrecting a deleted UUID. Idempotency records and orphan files are retained for 90 days by default (minimum 30), controlled by `SYNC_TOMBSTONE_RETENTION_DAYS`. Run `npm run cleanup:sync` from a scheduler. `PURGE_SYNC_TOMBSTONES=true` enables physical tombstone removal after that period, but it must only be used together with a deployment-specific policy that forces every older client through a full resync before uploads are accepted.
+Legacy metadata, binary uploads and collection writes now require version preconditions. The frontend sends the known entity version with file uploads and preserves local bytes on conflict without automatic replacement. See [legacy-write-conflicts.md](legacy-write-conflicts.md). This does not change the sync v2 contract above.
+
+Tombstones are retained indefinitely by default, which prevents an arbitrarily old client from resurrecting a deleted UUID. Expired idempotency records and genuinely unreferenced old files become cleanup candidates after 90 days by default (minimum 30), controlled by `SYNC_TOMBSTONE_RETENTION_DAYS`. Recent file registrations are also protected even if their file modification time is old. Sync history is not purged by this script, so its referenced file versions remain retained indefinitely.
+
+`npm run cleanup:sync` is a non-mutating preview. Physical cleanup requires `-- --apply`, a consistent backup and a maintenance window with all writers stopped; it is not concurrent garbage collection. Malformed retained snapshots or results abort before deletion. `PURGE_SYNC_TOMBSTONES=true` only enables physical tombstone removal together with explicit apply, and must only be used with a deployment-specific policy forcing every older client through a full resync before uploads are accepted. The backend does not enforce such a policy yet. See [cleanup-retention.md](cleanup-retention.md) for limits and recovery considerations.

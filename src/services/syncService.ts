@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { validateMetadata } from './inputValidation';
+import { parsePitchShift } from './audioService';
+import { normalizeChordArrays } from './chordData';
 
 export const ENTITY_TYPES = ['song', 'karaoke', 'custom_chord', 'playlist', 'karaoke_playlist'] as const;
 export type EntityType = typeof ENTITY_TYPES[number];
@@ -97,12 +100,13 @@ async function playlistIds(tx: Tx, userId: string, type: EntityType, data: Recor
   return { [field]: JSON.stringify(raw) };
 }
 
-function sanitized(type: EntityType, data: Record<string, unknown>) {
+function sanitized(type: EntityType, data: Record<string, unknown>, existing?: Record<string, unknown>) {
   const result: any = {};
   for (const key of editableFields[type]) if (Object.prototype.hasOwnProperty.call(data, key)) result[key] = data[key];
-  if ('dateAdded' in result) result.dateAdded = BigInt(Number(result.dateAdded));
+  if ('dateAdded' in result) result.dateAdded = BigInt(result.dateAdded);
+  if (type === 'karaoke' && result.pitchShift !== undefined && result.pitchShift !== null) result.pitchShift = parsePitchShift(result.pitchShift);
   if (type === 'custom_chord') {
-    for (const key of ['frets', 'fingers', 'barres']) if (key in result && typeof result[key] !== 'string') result[key] = JSON.stringify(result[key]);
+    Object.assign(result, normalizeChordArrays(data, existing));
     if ('baseFret' in result) result.baseFret = Number(result.baseFret);
   }
   return result;
@@ -134,13 +138,14 @@ export async function applyOperation(tx: Tx, userId: string, operation: SyncOper
   }
 
   const input = operation.data || {};
-  let data: any = sanitized(operation.entityType, input);
+  validateMetadata(operation.entityType, input, !existing);
+  let data: any = sanitized(operation.entityType, input, existing || undefined);
   if (operation.entityType === 'playlist' || operation.entityType === 'karaoke_playlist') data = { ...data, ...(await playlistIds(tx, userId, operation.entityType, input)) };
   if (!existing && typeof data.name !== 'string') return { accepted: false, reason: 'validation_error', serverEntity: null };
   if (!existing && operation.entityType === 'custom_chord' && (!data.root || !data.frets || !data.fingers || !Number.isInteger(data.baseFret))) return { accepted: false, reason: 'validation_error', serverEntity: null };
   const timestamps = { updatedAt: BigInt(now), version: nextVersion };
   const createData: any = { ...data, ...timestamps, id: operation.entityId, userId, createdAt: BigInt(now) };
-  if (operation.entityType === 'song' || operation.entityType === 'karaoke') createData.dateAdded = data.dateAdded || BigInt(now);
+  if (operation.entityType === 'song' || operation.entityType === 'karaoke') createData.dateAdded = data.dateAdded ?? BigInt(now);
   const entity = existing
     ? await model(tx, operation.entityType).update({ where: { id: operation.entityId }, data: { ...data, ...timestamps } })
     : await model(tx, operation.entityType).create({ data: createData });

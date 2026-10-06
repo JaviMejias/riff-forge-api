@@ -1,19 +1,27 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma';
+import { isRecord, invalidInput } from '../services/inputValidation';
+import { HttpError } from '../services/httpError';
+import { recordRequestError } from '../middleware/requestDiagnostics';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('❌ JWT_SECRET env var is required but not set');
 
-export const signup = async (req: Request, res: Response) => {
+function credentials(body: unknown) {
+  if (!isRecord(body)) invalidInput('body');
+  if (typeof body.email !== 'string' || !body.email.trim()) invalidInput('email');
+  if (typeof body.password !== 'string' || !body.password) invalidInput('password');
+  return { email: body.email, password: body.password };
+}
+
+export const signup = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password } = credentials(req.body);
+    const { name } = req.body;
+    if (name !== undefined && name !== null && typeof name !== 'string') invalidInput('name');
     
-    // BE-6 fix: validate input before hashing
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
-    }
     if (password.length < 8) {
       return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
     }
@@ -28,23 +36,18 @@ export const signup = async (req: Request, res: Response) => {
       data: { email, passwordHash, name }
     });
 
-    // BE-10 fix: reduce token lifetime from 30 days to 24 hours
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
   } catch (error) {
-    console.error(error);
+    if (error instanceof HttpError) return next(error);
+    recordRequestError(res, error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = req.body;
-    
-    // BE-6 fix: validate input before comparing
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
-    }
+    const { email, password } = credentials(req.body);
     
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -56,11 +59,11 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // BE-10 fix: reduce token lifetime
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, uiStorage: user.uiStorage } });
   } catch (error) {
-    console.error(error);
+    if (error instanceof HttpError) return next(error);
+    recordRequestError(res, error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -73,13 +76,15 @@ export const verifyToken = async (req: Request, res: Response) => {
     
     res.json({ user: { id: user.id, email: user.email, name: user.name, uiStorage: user.uiStorage } });
   } catch (error) {
+    recordRequestError(res, error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-export const saveSettings = async (req: Request, res: Response) => {
+export const saveSettings = async (req: Request, res: Response, next: NextFunction) => {
   const userId = req.userId;
   try {
+    if (!isRecord(req.body) || !isRecord(req.body.uiStorage)) invalidInput('uiStorage');
     const { uiStorage } = req.body;
     await prisma.user.update({
       where: { id: userId },
@@ -87,7 +92,8 @@ export const saveSettings = async (req: Request, res: Response) => {
     });
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
+    if (error instanceof HttpError) return next(error);
+    recordRequestError(res, error);
     res.status(500).json({ error: 'Failed to save settings' });
   }
 };

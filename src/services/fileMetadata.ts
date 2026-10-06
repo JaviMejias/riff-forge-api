@@ -1,10 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { uploadDir } from '../utils/storage';
 
 export function safeUploadPath(cloudUrl: unknown): string | null {
-  if (typeof cloudUrl !== 'string' || !/^\/uploads\/[A-Za-z0-9._-]+$/.test(cloudUrl)) return null;
-  return path.join(__dirname, '../../uploads', path.basename(cloudUrl));
+  if (typeof cloudUrl !== 'string' || !/^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(cloudUrl)) return null;
+  return path.join(uploadDir, path.basename(cloudUrl));
 }
 
 export function fileMetadata(cloudUrl: unknown, mimeType?: string) {

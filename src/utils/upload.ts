@@ -1,9 +1,11 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+import { uploadDir } from './storage';
+import { HttpError } from '../services/httpError';
 
 // Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -13,12 +15,26 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    cb(null, crypto.randomUUID() + path.extname(file.originalname).toLowerCase());
   }
 });
 
-export const upload = multer({
-  storage: storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-});
+function createUpload(extensions: string[]) {
+  const limits = {
+    fileSize: 50 * 1024 * 1024, files: 1, fields: 32, parts: 33,
+    fieldSize: 1024 * 1024, fieldNameSize: 64, fieldNestingDepth: 0, fieldArrayIndexLimit: 0
+  };
+  return multer({
+    storage,
+    limits,
+    fileFilter: (_req, file, callback) => {
+      if (!extensions.includes(path.extname(file.originalname).toLowerCase())) {
+        return callback(new HttpError(400, 'Formato de archivo no permitido'));
+      }
+      callback(null, true);
+    }
+  });
+}
+
+export const songUpload = createUpload(['.gp', '.gp3', '.gp4', '.gp5', '.gpx', '.txt']);
+export const karaokeUpload = createUpload(['.mp3', '.wav', '.m4a', '.ogg', '.webm', '.flac', '.aac']);

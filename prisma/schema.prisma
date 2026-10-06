@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:../data/dev.db"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -21,7 +21,17 @@ model User {
   customChords     CustomChord[]
   syncChanges      SyncChange[]
   syncOperations   ProcessedSyncOperation[]
+  fileAssets       FileAsset[]
   uiStorage        String? // Stores UI preferences as a JSON string
+}
+
+model FileAsset {
+  cloudUrl  String @id
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt BigInt
+
+  @@index([userId])
 }
 
 model Song {

@@ -4,9 +4,12 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "npx prisma db push && tsc",
-    "start": "npx prisma db push && node dist/index.js",
-    "test": "npx prisma generate && tsc && node --test tests/*.test.js",
+    "build": "npm run prisma:generate && tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "node scripts/prisma.js generate",
+    "db:migrate": "node scripts/prisma.js migrate deploy",
+    "db:status": "node scripts/prisma.js migrate status",
+    "test": "node tests/run-tests.js",
     "cleanup:sync": "node dist/scripts/cleanup-sync.js"
   },
   "keywords": [],
@@ -27,7 +30,7 @@
     "fluent-ffmpeg": "^2.1.3",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
     "prisma": "^5.22.0",
     "youtube-dl-exec": "^3.1.7"
   },

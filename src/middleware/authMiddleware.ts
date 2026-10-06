@@ -1,21 +1,28 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { HttpError } from '../services/httpError';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('❌ JWT_SECRET env var is required but not set');
 
-export const authenticate = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const token = authHeader.split(' ')[1];
+export function authenticatedUserId(authHeader: string | undefined): string | undefined {
+  if (authHeader === undefined) return undefined;
+  const match = /^Bearer ([^\s]+)$/.exec(authHeader);
+  if (!match) throw new HttpError(401, 'Sesión inválida');
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    req.userId = decoded.userId;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
+    const decoded = jwt.verify(match[1], JWT_SECRET!, { algorithms: ['HS256'] });
+    if (typeof decoded === 'string' || typeof decoded.userId !== 'string' || !decoded.userId) throw new Error('Invalid claims');
+    return decoded.userId;
+  } catch {
+    throw new HttpError(401, 'Sesión inválida');
   }
+}
+
+export const authenticate = (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const userId = authenticatedUserId(req.headers.authorization);
+    if (!userId) throw new HttpError(401, 'Inicia sesión para continuar');
+    req.userId = userId;
+    next();
+  } catch (error) { next(error); }
 };
