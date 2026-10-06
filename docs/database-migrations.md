@@ -33,6 +33,37 @@ No ejecutes `migrate reset` ni marques migraciones como aplicadas para eliminar 
 
 Referencia: [baselining de Prisma](https://www.prisma.io/docs/orm/prisma-migrate/workflows/baselining).
 
+### Adopción controlada de una instalación legacy sync v2
+
+El comando `npm run db:adopt-legacy` inspecciona en modo solo lectura. Solo admite el esquema exacto equivalente a las dos primeras migraciones, con historial inexistente o vacío, integridad válida y sin objetos/constraints inesperados. Las columnas pueden estar en otro orden por un `db push`. Otros esquemas requieren revisión manual; no se adopta una base nueva ni se marcan las cuatro migraciones como aplicadas.
+
+```bash
+npm run build
+npm run db:adopt-legacy
+```
+
+La inspección devuelve conteos y reparaciones previstas, sin emails, hashes ni contenidos privados. No crea una base inexistente. No está conectada al despliegue automático: el P3005 sigue siendo una condición de parada hasta que se prepare la instalación.
+
+Para aplicar, primero respalda también uploads y la imagen anterior, detén todas las escrituras (API, workers y herramientas externas) y usa una ruta absoluta nueva en un directorio restringido fuera del repositorio:
+
+```bash
+npm run db:adopt-legacy -- --apply --maintenance --backup /ruta/privada/nuevo-respaldo.db
+```
+
+`--maintenance` es la confirmación del operador de que detuvo las escrituras y cerró las conexiones de API/workers; no las detiene el script. La herramienta:
+
+1. Valida esquema, integridad y relaciones antes de escribir.
+2. Crea un respaldo consistente con la API de backup SQLite, permisos 0600 y sin sobrescribir otro archivo.
+3. Restaura ese respaldo en una base temporal y ensaya la recuperación completa y las migraciones pendientes. Un fallo del ensayo deja intacta la base objetivo.
+4. Comprueba que puede cambiar a journal DELETE, requerido por Prisma 5, antes de cambiar metadatos; conexiones WAL competidoras provocan una parada. Inicializa únicamente fechas en cero y versiones de archivo en cero con archivo presente. Conserva valores existentes y tombstones. Cada entidad modificada incrementa su versión y genera un snapshot nuevo; los snapshots anteriores no cambian. Entidades sin ningún evento reciben un snapshot inicial.
+5. Registra mediante Prisma 5.22 únicamente las dos migraciones de esquema comprobadas y aplica normalmente las posteriores, incluida `FileAsset` y la reparación legacy de playlists. Comprueba integridad, conteos de entidades e historial final.
+
+Las membresías de playlists ya existentes son la fuente de verdad: no se sobrescriben desde relaciones antiguas que pueden corresponder a listas vaciadas deliberadamente. Si hay membresías legacy perdidas, revísalas por separado antes de reabrir escrituras. El script no reproduce el backfill defectuoso de la migración histórica ni reemplaza uploads.
+
+Las operaciones de Prisma se ejecutan después de la transacción de metadatos y no forman una sola transacción global. Si falla la aplicación real pese al ensayo (disco, interrupción u otra escritura), mantén mantenimiento y revisa `db:status`; no repitas ciegamente la adopción ni arranques una imagen incompatible. Restaura el respaldo y la imagen/uploads coordinadamente si corresponde. El script conserva el respaldo y comunica el fallo, sin reset ni rollback automático.
+
+Comprueba después canciones, karaokes, playlists y sincronización con una cuenta real. Solo entonces reinicia el backend y habilita el despliegue automático.
+
 ## Reparación de playlists
 
 La migración histórica de sync v2 confundió las columnas de `_PlaylistToSong`: A corresponde a la playlist y B a la canción. Una nueva migración corrige los registros identificables sin editar el historial.
@@ -47,12 +78,16 @@ Desde el repositorio del frontend, después del respaldo y las comprobaciones:
 
 ```bash
 docker compose build backend
-docker compose run --rm --no-deps backend npm run db:migrate
+docker compose run --rm --no-deps -T backend npm run db:migrate < /dev/null
 docker compose up -d --no-deps backend
 docker compose ps backend
 ```
 
-El workflow se detiene si la migración falla y no sustituye el contenedor en ese caso. No crea un respaldo automático: prepara el respaldo y el estado de migraciones antes de activar este workflow sobre una instalación existente. El paso automatizado presupone que las escrituras ya están controladas durante el despliegue.
+El workflow se detiene si la migración falla y no sustituye el contenedor en ese caso. El contenedor de migración usa `-T` y stdin cerrado: en un script SSH recibido por heredoc, Docker Compose puede consumir los comandos posteriores si hereda esa entrada. Dos pruebas de shell verifican el reinicio tras una migración exitosa y su bloqueo ante un fallo.
+
+No crea un respaldo automático: prepara el respaldo y el estado de migraciones antes de activar este workflow sobre una instalación existente. El paso automatizado presupone que las escrituras ya están controladas durante el despliegue.
+
+No reinicies una imagen legacy cuyo script `start` incluya `prisma db push` sobre un esquema migrado: puede revertirlo. Usa una imagen compatible con arranque `node dist/index.js`; si necesitas recuperar una versión anterior, restaura el respaldo coordinadamente y deshabilita el push automático antes de arrancarla.
 
 Verifica `/health` y al menos un flujo autenticado de lectura y sincronización. `/health` por sí solo no comprueba el estado de SQLite.
 

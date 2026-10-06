@@ -9,6 +9,7 @@
     "prisma:generate": "node scripts/prisma.js generate",
     "db:migrate": "node scripts/prisma.js migrate deploy",
     "db:status": "node scripts/prisma.js migrate status",
+    "db:adopt-legacy": "node scripts/adopt-legacy-database.js",
     "test": "node tests/run-tests.js",
     "cleanup:sync": "node dist/scripts/cleanup-sync.js"
   },
